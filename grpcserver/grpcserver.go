@@ -9,7 +9,6 @@ import (
 	pb "tracedemo/protos"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/opentracing/opentracing-go"
 
@@ -29,7 +28,8 @@ func StartGrpcServer() {
 			grpc_prometheus.UnaryServerInterceptor,
 			middleware.ServerTracing(opentracing.GlobalTracer()), //jaeger
 			middleware.ServerSiteCode(),                          //jaeger
-			grpc_recovery.UnaryServerInterceptor(),               //panic recover
+			middleware.ServerTimeLog(),
+			//grpc_recovery.UnaryServerInterceptor(),               //panic recover
 		),
 	))
 

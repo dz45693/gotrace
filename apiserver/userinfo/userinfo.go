@@ -2,13 +2,13 @@ package userinfo
 
 import (
 	"fmt"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/opentracing/opentracing-go"
+	"tracedemo/middleware"
 	pb "tracedemo/protos"
 	"tracedemo/service"
 
-	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
-
-	"tracedemo/middleware"
 
 	"github.com/kataras/iris/v12"
 )
@@ -28,7 +28,11 @@ func (t *ApiServer) TestRpc(ctx iris.Context) {
 	addr := "localhost:9090"
 	opts := []grpc.DialOption{
 		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(middleware.ClientInterceptor(opentracing.GlobalTracer())),
+		grpc.WithUnaryInterceptor(grpc_middleware.ChainUnaryClient(
+			middleware.ClientTracing(opentracing.GlobalTracer()),
+			middleware.ClientSiteCode(),
+			middleware.ClientTimeLog(),
+			)),
 	}
 
 	conn, err := grpc.Dial(addr, opts...)

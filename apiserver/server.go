@@ -2,13 +2,13 @@ package apiserver
 
 import (
 	contextV2 "context"
+	"fmt"
+	"runtime/debug"
 	"tracedemo/apiserver/userinfo"
 	"tracedemo/logger"
 
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
-	log "github.com/kataras/iris/v12/middleware/logger"
-	"github.com/kataras/iris/v12/middleware/recover"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -16,10 +16,9 @@ func StartApiServerr() {
 	addr := ":8080"
 
 	app := iris.New()
-	app.Use(recover.New())
-	app.Use(log.New())
 	app.Use(openTracing())
 	app.Use(withSiteCode())
+	app.Use(withRecover())
 
 	app.Get("/", func(c context.Context) {
 		c.WriteString("pong")
@@ -60,6 +59,19 @@ func withSiteCode() context.Handler {
 		}
 		ctx := contextV2.WithValue(c.Request().Context(), "SiteCode", siteCode)
 		c.ResetRequest(c.Request().WithContext(ctx))
+
+		c.Next()
+	}
+}
+
+func withRecover() context.Handler {
+	return func(c iris.Context) {
+		defer func() {
+			if e := recover(); e != nil {
+				stack := debug.Stack()
+				logger.Error(c.Request().Context(), fmt.Sprintf("Api has err:%v, stack:%v", e, string(stack)))
+			}
+		}()
 
 		c.Next()
 	}

@@ -2,12 +2,15 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"runtime/debug"
 	"strings"
+	"time"
 	"tracedemo/logger"
 )
 
@@ -31,7 +34,7 @@ func (m MDCarrier) Set(key, val string) {
 }
 
 // ClientInterceptor 客户端拦截器
-func ClientInterceptor(tracer opentracing.Tracer) grpc.UnaryClientInterceptor {
+func ClientTracing(tracer opentracing.Tracer) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, request, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		//一个RPC调用的服务端的span，和RPC服务客户端的span构成ChildOf关系
 		var parentCtx opentracing.SpanContext
@@ -81,6 +84,50 @@ func ClientInterceptor(tracer opentracing.Tracer) grpc.UnaryClientInterceptor {
 	}
 }
 
+func ClientSiteCode() grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, request, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		md, ok := metadata.FromOutgoingContext(ctx)
+		if !ok {
+			md = metadata.New(nil)
+		} else {
+			md = md.Copy()
+		}
+
+		///SiteCode
+		siteCode := fmt.Sprintf("%v", ctx.Value("SiteCode"))
+		if len(siteCode) < 1 || strings.Contains(siteCode, "nil") {
+			siteCode = "001"
+		}
+		md.Set("SiteCode", siteCode)
+
+		return invoker(ctx, method, request, reply, cc, opts...)
+	}
+}
+
+func ClientTimeLog() grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, request, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		defer func() {
+			if e := recover(); e != nil {
+				stack := debug.Stack()
+				logger.Error(ctx, fmt.Sprintf("grpc-client has err:%v, stack:%v", e, string(stack)))
+			}
+		}()
+
+		startTime := time.Now().UnixNano()
+		err := invoker(ctx, method, request, reply, cc, opts...)
+		duration := (time.Now().UnixNano() - startTime) / 1e6
+		callTime := time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05")
+		requestByte, _ := json.Marshal(request)
+		responseByte, _ := json.Marshal(reply)
+		logger.Info(ctx, fmt.Sprintf("grpc-client:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回数据:%v", method, callTime, duration, string(requestByte), string(responseByte)))
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("grpc-client:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回错误:%v", method, callTime, duration, string(requestByte), err))
+		}
+
+		return err
+	}
+}
+
 // ServerInterceptor Server 端的拦截器
 func ServerTracing(tracer opentracing.Tracer) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
@@ -113,7 +160,6 @@ func ServerTracing(tracer opentracing.Tracer) grpc.UnaryServerInterceptor {
 
 }
 
-//新增日志打印
 func ServerSiteCode() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
 		//读取siteCode
@@ -136,5 +182,35 @@ func ServerSiteCode() grpc.UnaryServerInterceptor {
 		c2 := context.WithValue(ctx, "001", siteCode)
 
 		return handler(c2, req)
+	}
+}
+
+
+func ServerTimeLog() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
+		defer func() {
+			if e := recover(); e != nil {
+				stack := debug.Stack()
+				logger.Error(ctx, fmt.Sprintf("grpc-client has err:%v, stack:%v", e, string(stack)))
+			}
+		}()
+
+		startTime := time.Now().UnixNano()
+		ret, err := handler(ctx, req)
+		duration := (time.Now().UnixNano() - startTime) / 1e6
+		callTime := time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05")
+		requestByte, _ := json.Marshal(req)
+		responseStr := ""
+		if err == nil {
+			responseByte, _ := json.Marshal(ret)
+			responseStr = string(responseByte)
+		}
+
+		logger.Info(ctx, fmt.Sprintf("grpc-server:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回数据:%v", info.FullMethod, callTime, duration, string(requestByte), responseStr))
+		if err != nil {
+			logger.Error(ctx, fmt.Sprintf("grpc-server:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回错误:%v", info.FullMethod, callTime, duration, string(requestByte), err))
+		}
+
+		return ret, err
 	}
 }
