@@ -116,12 +116,11 @@ func ClientTimeLog() grpc.UnaryClientInterceptor {
 		startTime := time.Now().UnixNano()
 		err := invoker(ctx, method, request, reply, cc, opts...)
 		duration := (time.Now().UnixNano() - startTime) / 1e6
-		callTime := time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05")
 		requestByte, _ := json.Marshal(request)
 		responseByte, _ := json.Marshal(reply)
-		logger.Info(ctx, fmt.Sprintf("grpc-client:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回数据:%v", method, callTime, duration, string(requestByte), string(responseByte)))
+		logger.Info(ctx, fmt.Sprintf("grpc-client:方法名:%v,耗时:%vms,请求数据:%v,返回数据:%v", method, duration, string(requestByte), string(responseByte)))
 		if err != nil {
-			logger.Error(ctx, fmt.Sprintf("grpc-client:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回错误:%v", method, callTime, duration, string(requestByte), err))
+			logger.Error(ctx, fmt.Sprintf("grpc-client:方法名:%v,耗时:%vms,请求数据:%v,返回错误:%v", method, duration, string(requestByte), err))
 		}
 
 		return err
@@ -185,7 +184,6 @@ func ServerSiteCode() grpc.UnaryServerInterceptor {
 	}
 }
 
-
 func ServerTimeLog() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (_ interface{}, err error) {
 		defer func() {
@@ -198,7 +196,6 @@ func ServerTimeLog() grpc.UnaryServerInterceptor {
 		startTime := time.Now().UnixNano()
 		ret, err := handler(ctx, req)
 		duration := (time.Now().UnixNano() - startTime) / 1e6
-		callTime := time.Unix(time.Now().Unix(), 0).Format("2006-01-02 15:04:05")
 		requestByte, _ := json.Marshal(req)
 		responseStr := ""
 		if err == nil {
@@ -206,9 +203,9 @@ func ServerTimeLog() grpc.UnaryServerInterceptor {
 			responseStr = string(responseByte)
 		}
 
-		logger.Info(ctx, fmt.Sprintf("grpc-server:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回数据:%v", info.FullMethod, callTime, duration, string(requestByte), responseStr))
+		logger.Info(ctx, fmt.Sprintf("grpc-server:方法名:%v,耗时:%vms,请求数据:%v,返回数据:%v", info.FullMethod, duration, string(requestByte), responseStr))
 		if err != nil {
-			logger.Error(ctx, fmt.Sprintf("grpc-server:方法名:%v调用时间%v,耗时:%vms,请求数据:%v,返回错误:%v", info.FullMethod, callTime, duration, string(requestByte), err))
+			logger.Error(ctx, fmt.Sprintf("grpc-server:方法名:%v,耗时:%vms,请求数据:%v,返回错误:%v", info.FullMethod, duration, string(requestByte), err))
 		}
 
 		return ret, err
