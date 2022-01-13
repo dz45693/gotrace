@@ -284,6 +284,7 @@ func gormSQL(inputSql interface{}, value interface{}) string {
 	}
 
 	if formattedValues == nil || len(formattedValues) < 1 {
+		sql = fmt.Sprintf("%v",inputSql)
 		return sql
 	}
 
