@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trace
+  namespace: go
+  labels:
+    app: trace
+    version: v1
+spec:
+  replicas: 1
+  minReadySeconds: 10 
+  selector:
+    matchLabels:
+      app: trace
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: trace
+        version: v1
+    spec:
+      imagePullSecrets:
+      - name: regsecret
+      containers:
+      - name: trace
+        image: 192.168.100.30:8080/go/trace:2021
+        ports:
+        - containerPort: 8080
+        - containerPort: 9090
+        imagePullPolicy: Always
+
+---
+
+apiVersion: v1 
+kind: Service 
+metadata:
+  name: trace
+  namespace: go 
+  labels:
+    app: trace
+    version: v1
+spec:
+  type: NodePort
+  ports:
+    - port: 8080 
+      targetPort: 8080 
+      nodePort: 30180
+      protocol: TCP
+      name: http
+    - port: 9090 
+      targetPort: 9090 
+      nodePort: 30190
+      protocol: TCP
+      name: grpc
+  selector:
+    app: trace
